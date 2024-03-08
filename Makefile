@@ -13,3 +13,6 @@ upload: ## Upload the firmware to the board
 log: ## Start the logs
 	cargo espflash monitor
 
+docs:
+	cargo doc --no-deps
+

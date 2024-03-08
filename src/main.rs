@@ -1,85 +1,43 @@
-use std::error::Error;
-use std::str::FromStr;
-use std::sync::Mutex;
-use std::thread::sleep;
-use std::time::Duration;
-
-use esp_idf_svc::eventloop::EspSystemEventLoop;
-// use esp_idf_svc::hal::delay::FreeRtos;
-use esp_idf_svc::hal::{ peripherals::Peripherals, gpio::PinDriver };
-use esp_idf_svc::http::{ Method::Get, server::EspHttpServer };
-use esp_idf_svc::nvs::EspDefaultNvsPartition;
-use esp_idf_svc::wifi::{ ClientConfiguration, Configuration, EspWifi };
-use heapless::String;
-// use log::println;
-// use std::env;
+use embedded_graphics::mono_font::MonoTextStyleBuilder;
+use embedded_graphics::pixelcolor::BinaryColor;
+use esp_idf_svc::hal::{ i2c, peripherals::Peripherals };
+use esp_idf_svc::hal::units::FromValueType;
+use ssd1306::mode::DisplayConfig;
+use ssd1306::rotation::DisplayRotation;
+use ssd1306::size::DisplaySize128x32;
+use ssd1306::{ I2CDisplayInterface, Ssd1306 };
+use embedded_graphics::mono_font::ascii::FONT_6X10;
 
 fn main() {
     esp_idf_svc::sys::link_patches();
 
-    let ssid: String<32> = String::from_str("movistar2,4GHZ_EF39B0").unwrap();
-    let password: String<64> = String::from_str("QFrjq9dwT8b4ZvyYBZ52").unwrap();
-
     let peripherals = Peripherals::take().unwrap();
-    let led_pin = PinDriver::output(peripherals.pins.gpio1).expect(
-        "Error: Unable to set pin(led_pin) gpio2 Output"
+
+    let scl = peripherals.pins.gpio6;
+    let sda = peripherals.pins.gpio5;
+
+    let _cfg = i2c::config::Config::new().baudrate(FromValueType::kHz(400).into());
+    let _i2c = i2c::I2cDriver::new(peripherals.i2c0, sda, scl, &_cfg).unwrap();
+    let interface = I2CDisplayInterface::new(_i2c);
+
+    let mut display = Ssd1306::new(
+        interface,
+        DisplaySize128x32,
+        DisplayRotation::Rotate0
+    ).into_buffered_graphics_mode();
+
+    display.init().expect("Init Error");
+
+    let text_style = MonoTextStyleBuilder::new()
+        .font(&FONT_6X10)
+        .text_color(BinaryColor::On)
+        .build();
+
+    embedded_graphics::text::Text::new(
+        "Hello Rust!",
+        embedded_graphics::prelude::Point::new(0, 0),
+        text_style
     );
-    let led_pin = Mutex::new(led_pin);
 
-    let sys_loop = EspSystemEventLoop::take().unwrap();
-    let nvs = EspDefaultNvsPartition::take().unwrap();
-
-    let mut wifi_driver = EspWifi::new(peripherals.modem, sys_loop, Some(nvs)).unwrap();
-
-    wifi_driver
-        .set_configuration(
-            &Configuration::Client(ClientConfiguration {
-                ssid,
-                password,
-                ..Default::default()
-            })
-        )
-        .unwrap();
-
-    wifi_driver.start().unwrap();
-    println!("Wifi Started");
-
-    wifi_driver.connect().unwrap();
-    println!("Wifi connected");
-
-    while !wifi_driver.is_connected().unwrap() {
-        let config = wifi_driver.get_configuration().unwrap();
-        println!("Waiting for station {:?}", config);
-    }
-    println!("Should be connected now");
-
-    let mut server = EspHttpServer::new(&Default::default()).unwrap();
-
-    server
-        .fn_handler(
-            "/led",
-            Get,
-            |_| -> Result<(), Box<dyn Error>> {
-                let mut led_pin = led_pin.lock().unwrap();
-                led_pin.toggle().expect("Error: Could not toggle pin(led_pin) gpio2");
-                println!("/led endpoint has been requested");
-                Ok(())
-            }
-        )
-        .unwrap();
-
-    loop {
-        println!("IP info: {:?}", wifi_driver.sta_netif().get_ip_info().unwrap());
-        sleep(Duration::new(10, 0));
-    }
-
-    // loop {
-    //     led_pin.set_high().expect("Error: Unable to set pin(led_pin) gpio2 high");
-    //     println!("LED ON");
-    //     FreeRtos::delay_ms(3000);
-
-    //     led_pin.set_low().expect("Error: Unable to set pin(led_pin) gpio2 high");
-    //     println!("LED OFF");
-    //     FreeRtos::delay_ms(3000);
-    // }
+    display.flush().unwrap();
 }
