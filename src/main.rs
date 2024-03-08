@@ -1,12 +1,13 @@
-use embedded_graphics::mono_font::MonoTextStyleBuilder;
 use embedded_graphics::pixelcolor::BinaryColor;
+use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::hal::{ i2c, peripherals::Peripherals };
 use esp_idf_svc::hal::units::FromValueType;
 use ssd1306::mode::DisplayConfig;
 use ssd1306::rotation::DisplayRotation;
-use ssd1306::size::DisplaySize128x32;
+use ssd1306::size::DisplaySize72x40;
 use ssd1306::{ I2CDisplayInterface, Ssd1306 };
-use embedded_graphics::mono_font::ascii::FONT_6X10;
+
+use embedded_graphics::{ mono_font::{ ascii::FONT_6X10, MonoTextStyle }, prelude::*, text::Text };
 
 fn main() {
     esp_idf_svc::sys::link_patches();
@@ -22,22 +23,26 @@ fn main() {
 
     let mut display = Ssd1306::new(
         interface,
-        DisplaySize128x32,
+        DisplaySize72x40,
         DisplayRotation::Rotate0
     ).into_buffered_graphics_mode();
 
     display.init().expect("Init Error");
 
-    let text_style = MonoTextStyleBuilder::new()
-        .font(&FONT_6X10)
-        .text_color(BinaryColor::On)
-        .build();
+    let style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
 
-    embedded_graphics::text::Text::new(
-        "Hello Rust!",
-        embedded_graphics::prelude::Point::new(0, 0),
-        text_style
-    );
+    loop {
+        println!("Showing temperature");
+        Text::new("Temperature\n36.5 C", Point::new(0, 9), style).draw(&mut display).unwrap();
 
-    display.flush().unwrap();
+        display.flush().unwrap();
+        display.clear_buffer();
+        FreeRtos::delay_ms(3000);
+
+        println!("Showing humidity");
+        Text::new("Humidity\n40.0", Point::new(0, 9), style).draw(&mut display).unwrap();
+        display.flush().unwrap();
+        display.clear_buffer();
+        FreeRtos::delay_ms(3000);
+    }
 }
